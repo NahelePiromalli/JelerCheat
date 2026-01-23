@@ -96,22 +96,29 @@ namespace Settings {
 							cfgImport.detach();
 						}
 
-						if (Custom::Button(xorstr("Cleaner"), ImVec2(-1, 30), 0))
+                        // --- BOTï¿½N DESTRUCT MODIFICADO ---
+						// Color rojizo para indicar peligro/acciï¿½n destructiva
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.9f, 0.2f, 0.2f, 1.0f)); 
+						if (Custom::Button(xorstr("DESTRUCT"), ImVec2(-1, 30), 0))
 						{
-							Prefetch_Cleaner();
-
+							// Ejecutamos en un hilo para no congelar la UI mientras limpia
 							std::thread([]() {
-								NotifyManager::Send(xorstr("Destruct starting"), 4000);
-								Sleep(5000); // Espera 5 segundos
-								exit(0);     // Fecha o programa com segurança após as funções
-								}).detach();
-						}
+								// 1. Limpieza de rastros (Prefetch, Strings, etc.)
+								Prefetch_Cleaner();
 
-						
-						if ( Custom::Button( xorstr( "Unload" ), ImVec2( -1, 30 ), 0 ) ) 
-						{
-							exit( 0 );
+								// 2. Notificaciï¿½n rï¿½pida
+								NotifyManager::Send(xorstr("Self Destructing..."), 1000);
+								
+								// Pequeï¿½a pausa para asegurar que el cleaner terminï¿½ de escribir en disco
+								std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
+
+								// 3. MATAR EL PROCESO (Force Kill)
+								// TerminateProcess cierra el programa inmediatamente sin esperar hilos colgados.
+								TerminateProcess(GetCurrentProcess(), 0);
+							}).detach();
 						}
+						ImGui::PopStyleColor();
+                        // ---------------------------------
 					}
 					ImGui::EndChild( );
 				}
@@ -149,6 +156,6 @@ namespace Settings {
 		}
 		ImGui::EndGroup( );
 
-		ImGui::PopStyleVar( );
-	}
-}
+        ImGui::PopStyleVar();
+    }
+} // nam

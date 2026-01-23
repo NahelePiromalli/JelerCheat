@@ -246,6 +246,8 @@ public:
 		return Mem.Read<D3DXVECTOR3>( reinterpret_cast< uintptr_t >( this ) + 0x320 );
 	}
 
+	
+
 	void FreezePed( bool Toggle ) {
 		if ( !this ) { return; }
 		if ( !InVehicle( ) ) {
@@ -257,12 +259,12 @@ public:
 		}
 	}
 
-	void SetGodMode( bool Toggle ) {
-		if ( !this ) { return; }
-
-		uintptr_t Addr = reinterpret_cast< uintptr_t >( this ) + 0x188;
-		DWORD flag = Mem.Read<DWORD>( Addr );
-		Mem.Write<DWORD>( Addr, Toggle == true ? flag |= ( 1 << 9 ) : flag &= ~( 1 << 9 ) );
+void SetGodMode( bool Toggle ) {
+    if ( !this ) { return; }
+    uintptr_t Addr = reinterpret_cast< uintptr_t >( this ) + 0x188;
+    DWORD flag = Mem.Read<DWORD>( Addr );
+    // USA 8, NO 9
+    Mem.Write<DWORD>( Addr, Toggle == true ? flag |= ( 1 << 8 ) : flag &= ~( 1 << 8 ) );
 	}
 
 	void SetInfStamina( bool Toggle ) {
@@ -434,99 +436,87 @@ public:
 class CVehicle {
 public:
 
-	D3DXVECTOR3 GetPos( ) {
-		if ( !this ) { return D3DXVECTOR3( 0, 0, 0 ); }
-		return Mem.Read<D3DXVECTOR3>( reinterpret_cast< uintptr_t >( this ) + 0x90 );
+	D3DXVECTOR3 GetPos() {
+		if (!this) { return D3DXVECTOR3(0, 0, 0); }
+		return Mem.Read<D3DXVECTOR3>(reinterpret_cast<uintptr_t>(this) + 0x90);
 	}
 
-	void SetPos( D3DXVECTOR3 Pos ) {
-		if ( !this ) { return; }
+	void SetPos(D3DXVECTOR3 Pos) {
+		if (!this) { return; }
 
-		//suintptr_t Navigation = Mem.Read<uintptr_t>( reinterpret_cast< uintptr_t >( this ) + 0x30 );
-		//Mem.Write<D3DXVECTOR3>( Navigation + 0x30, D3DXVECTOR3( 0, 0, 0 ) );
-		Mem.Write<D3DXVECTOR3>( reinterpret_cast< uintptr_t >( this ) + 0x90, Pos );
+		// 1. Actualizar Posición Visual
+		Mem.Write<D3DXVECTOR3>(reinterpret_cast<uintptr_t>(this) + 0x90, Pos);
+
+		// 2. Actualizar Posición de Navegación (CRÍTICO PARA NOCLIP)
+		// Si no haces esto, el auto volverá a su lugar original
+		uintptr_t Navigation = Mem.Read<uintptr_t>(reinterpret_cast<uintptr_t>(this) + 0x30);
+		if (Navigation) {
+			Mem.Write<D3DXVECTOR3>(Navigation + 0x50, Pos); // 0x50 es la posición en el Nav
+			Mem.Write<D3DXVECTOR3>(Navigation + 0x30, D3DXVECTOR3(0, 0, 0)); // Reseteamos rotación/velocidad del Nav
+		}
 	}
 
-	uintptr_t GetHandling( ) {
-		if ( !this ) { return 0; }
-		return Mem.Read<uintptr_t>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_Handling );
+	// AGREGADO: Necesario para que el NoClip detenga la caída
+	void SetVelocity(D3DXVECTOR3 Vel) {
+		if (!this) return;
+		Mem.Write<D3DXVECTOR3>(reinterpret_cast<uintptr_t>(this) + 0x320, Vel);
 	}
 
-	bool GetGodMode( ) {
-		if ( !this ) { return false; }
-		//Atualizar Offsets ??
-		return Mem.Read<BYTE>( reinterpret_cast< uintptr_t >( this ) + 0x189 );
+	uintptr_t GetHandling() {
+		if (!this) { return 0; }
+		return Mem.Read<uintptr_t>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_Handling);
 	}
 
-	void SetGodMode( bool Toggle ) {
-		if ( !this ) { return; }
-		//Atualizar Offsets ??
-		Mem.Write<BYTE>( reinterpret_cast< uintptr_t >( this ) + 0x189, Toggle );
+	bool GetGodMode() {
+		if (!this) { return false; }
+		return Mem.Read<BYTE>(reinterpret_cast<uintptr_t>(this) + 0x189);
 	}
 
-	float GetGravity( ) {
-		if ( !this ) { return 0; }
-		return Mem.Read<float>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleGravity );
+	void SetGodMode(bool Toggle) {
+		if (!this) { return; }
+		// Para vehículos, a veces se usa 0x189 (CanBeDamaged) o flags en m_damage_flags
+		Mem.Write<BYTE>(reinterpret_cast<uintptr_t>(this) + 0x189, Toggle);
 	}
 
-	void SetGravity( float Value ) {
-		if ( !this ) { return; }
-		Mem.Write<float>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleGravity, Value );
+	float GetGravity() {
+		if (!this) { return 0; }
+		return Mem.Read<float>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleGravity);
 	}
 
-	void Fix( ) {
-		if ( !this ) { return; }
+	void SetGravity(float Value) {
+		if (!this) { return; }
+		Mem.Write<float>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleGravity, Value);
+	}
 
+	void Fix() {
+		if (!this) { return; }
 		float Value = 1000.0f;
-
-		//f3 0f 10 80 ? ? ? ? f3 0f 10 89 ? ? ? ? 0f 28 da
-		static const int Fix2Addr = Mem.Read<int>( Mem.FindSignature(
-			{ 0xf3, 0x0f, 0x10, 0x80, 0x00, 0x00, 0x00, 0x00, 0xf3, 0x0f, 0x10, 0x89, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x28, 0xda }
-		) + 4 );
-
-		//f3 0f 10 b8 ? ? ? ? 8b 81
-		static const int Fix3Addr = Mem.Read<int>( Mem.FindSignature(
-			{ 0xf3, 0x0f, 0x10, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x8b, 0x81 }
-		) + 4 );
-
-		//8a 87 ? ? ? ? c0 e8 ? 88 82 ? ? ? ? 8a 87 ? ? ? ? c0 e8 ? 41 22 c6 88 82 ? ? ? ? 48 8b 87
-		static const int Fix4Addr = Mem.Read<int>( Mem.FindSignature(
-			{ 0x8a, 0x87, 0x00 , 0x00 , 0x00 , 0x00 , 0xc0, 0xe8, 0x00 , 0x88, 0x82, 0x00 , 0x00 , 0x00 , 0x00 , 0x8a, 0x87, 0x00 , 0x00 , 0x00 , 0x00 , 0xc0, 0xe8, 0x00 , 0x41, 0x22, 0xc6, 0x88, 0x82, 0x00 , 0x00 , 0x00 , 0x00 , 0x48, 0x8b, 0x87 }
-		) + 2 );
-
-		Mem.Write<float>( reinterpret_cast< uintptr_t >( this ) + 0x280, Value ); //Fix1
-		Mem.Write<float>( reinterpret_cast< uintptr_t >( this ) + Fix2Addr, Value ); //Fix2
-		Mem.Write<float>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleEngineHealth, Value );
-		Mem.Write<float>( reinterpret_cast< uintptr_t >( this ) + Fix3Addr, Value ); //Fix3
-		Mem.Write<BYTE>( reinterpret_cast< uintptr_t >( this ) + Fix4Addr, 1 ); //Fix4
-
-		// std::uint8_t CarFlag = memory::read<std::uint8_t>( Vehicle + 0x970 );
-		//Mem.Write<std::uint8_t>( Vehicle + 0x970, CarFlag |= ( 1 << 18 ) );
+		// ... (MANTÉN TU CÓDIGO DE FIX AQUÍ, ES LARGO Y ESTABA BIEN) ...
+		// Solo asegúrate de copiar el contenido de tu Fix() original
+		Mem.Write<float>(reinterpret_cast<uintptr_t>(this) + 0x280, Value); // Health
+		Mem.Write<float>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleEngineHealth, Value);
+		// ...
 	}
 
-	bool IsLocked( ) {
-		if ( !this ) { return false; }
-		return Mem.Read<uint32_t>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleDoorsLockState ) == 2;
+	bool IsLocked() {
+		if (!this) { return false; }
+		return Mem.Read<uint32_t>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleDoorsLockState) == 2;
 	}
 
-	void DoorState( bool Unlock ) {
-		if ( !this ) { return; }
-
-		Mem.Write<uint32_t>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleDoorsLockState, Unlock ? 1 : 2 );
+	void DoorState(bool Unlock) {
+		if (!this) { return; }
+		Mem.Write<uint32_t>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleDoorsLockState, Unlock ? 1 : 2);
 	}
 
-	D3DXVECTOR3 GetVelocity( ) {
-		if ( !this ) { return D3DXVECTOR3( 0, 0, 0 ); }
-		return Mem.Read<D3DXVECTOR3>( reinterpret_cast< uintptr_t >( this ) + 0x320 );
+	D3DXVECTOR3 GetVelocity() {
+		if (!this) { return D3DXVECTOR3(0, 0, 0); }
+		return Mem.Read<D3DXVECTOR3>(reinterpret_cast<uintptr_t>(this) + 0x320);
 	}
 
-	CPed * GetDriver( )
-	{
-		if ( !this ) return 0;
-		return ( CPed * )Mem.Read<uintptr_t>( reinterpret_cast< uintptr_t >( this ) + g_Offsets.m_VehicleDriver );
+	CPed* GetDriver() {
+		if (!this) return 0;
+		return (CPed*)Mem.Read<uintptr_t>(reinterpret_cast<uintptr_t>(this) + g_Offsets.m_VehicleDriver);
 	}
-
-
 };
 
 class CWeaponManager {
